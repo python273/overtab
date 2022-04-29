@@ -5,6 +5,7 @@
 <head>
   <meta charset="utf-8">
   <title>OverTab</title>
+  <link rel="icon" type="image/png" href="icon.png" />
   <style>
     * {
       margin: 0;
@@ -13,9 +14,30 @@
     }
   </style>
   <style id="style">
-    body {
-        background-color: #030f0b;
-        color: #d7dbec;
+    :root {
+      --brand-color: #9234df;
+      --bg-color: #fff;
+      --text-color: rgb(1, 9, 17);
+      --window-border-color: #ecedee;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand-color: #b75cff;
+        --bg-color: rgb(37, 36, 51);
+        --text-color: rgb(221, 235, 251);
+        --window-border-color: rgb(26, 20, 34);
+      }
+    }
+
+    html, body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+	      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+    }
+
+    ::placeholder {
+      color: var(--text-color);
     }
 
     #windows {
@@ -24,20 +46,33 @@
     }
 
     .window {
+      padding-bottom: 25px;
+      margin-bottom: 25px;
+      border-bottom: 8px solid var(--window-border-color);
+    }
+
+    .subgroup {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(240px, 2fr));
 
-        border-bottom: 2px solid #deedff8f;
+        border-bottom: 3px solid var(--window-border-color);
         margin-bottom: 10px;
         padding-bottom: 10px;
     }
 
-    .window:last-child {
+    .subgroup:last-child {
         border-bottom: none;
     }
 
+    .tabIconContainer {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      vertical-align: sub;
+      margin-right: 0.3em;
+    }
+
     .tabIcon {
-        margin-right: 0.2em;
         height: 100%;
         max-height: 1em;
     }
@@ -52,7 +87,7 @@
 
         white-space: nowrap;
         overflow: hidden;
-        font-size: 1.1em;
+        font-size: 1em;
     }
 
     .tabHighlighted {
@@ -67,14 +102,14 @@
         min-height: 20px;
         max-width: 512px;
 
-        background: #030f0b;
+        background: var(--bg-color);
         padding: 8px;
 
-        border: 1px solid #7cffd3;
+        border: 2px solid var(--brand-color);
 
         word-wrap: anywhere;
         overflow: auto;
-        font-size: 1.1em;
+        font-size: 1.05em;
     }
 
     .tabPopoverTitle {
@@ -89,7 +124,8 @@
         width: calc(100%);
         padding: 5px;
         background: transparent;
-        border: 1px solid #7cffd3;
+        border: 2px solid var(--brand-color);
+        background-color: var(--window-border-color);
         border-radius: 5px;
         color: #fff;
         font-size: 1.1em;
@@ -97,10 +133,29 @@
 
     .header {
       margin-bottom: 4px;
+      border-bottom: 2px solid var(--window-border-color);
     }
 
-    .header div {
+    .header > div {
       padding: 5px;
+    }
+
+    .separator {
+      color: var(--brand-color);
+      font-size: 1.1em;
+      font-weight: bolder;
+      font-family: monospace;
+      padding: 0 10px 0 10px;
+    }
+
+    .extra-scroll {
+      height: 50vh
+    }
+
+    .checkboxes {
+      display: flex;
+      gap: 12px;
+      font-family: monospace;
     }
   </style>
 </head>
@@ -118,9 +173,10 @@
         />
       </form>
     </div>
-    <div class="flex">
-      <input id="queryIsRegex" type="checkbox"/> <div>Regex</div>
-      <input id="sortByUrl" type="checkbox"/> <div>Sort by URL</div>
+    <div class="checkboxes">
+      <div class="flex"><input id="queryIsRegex" type="checkbox"/>&nbsp;<div>Regex</div></div>
+      <div class="flex"><input id="sortByUrl" type="checkbox"/>&nbsp;<div>Sort by URL</div></div>
+      <div class="flex"><input id="separateByTime" type="checkbox"/>&nbsp;<div>Separate by time</div></div>
     </div>
   </div>
   <div id="root"></div>
