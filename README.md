@@ -1,3 +1,3 @@
 # overtab
 
-https://addons.mozilla.org/en-US/firefox/addon/overtab/
+https://addons.mozilla.org/firefox/addon/overtab/
