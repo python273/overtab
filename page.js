@@ -15,7 +15,11 @@ function getTabIdFromEvent(event) {
 async function onTabClick(event) {
     event.preventDefault();
     const tabId = getTabIdFromEvent(event);
-    await browser.tabs.update(tabId, {active: true, highlighted: false});
+    if (close_tab_on_click) {
+        await browser.tabs.remove(tabId);
+    } else {
+        await browser.tabs.update(tabId, {active: true, highlighted: false});
+    }
 }
 
 async function onTabAuxclick(event) {
@@ -115,6 +119,7 @@ const createTabEl = (tab) => {
     const tabTitle = document.createElement('span');
     tabTitle.classList.add("tabTitle");
     tabTitle.innerText = tab.title;
+    // tabTitle.innerText = tab.title.replace(/[\S]/gi, '▓');
     // tabTitle.innerText = new Date(tab.lastAccessed).toLocaleString();
 
     tabEl.appendChild(tabTitle);
@@ -227,7 +232,7 @@ async function _renderTabs() {
         let privTime = windowTabs[0].lastAccessed;
 
         for (let tab of windowTabs) {
-            if (separateByTime && (Math.abs(tab.lastAccessed - privTime) > 4 * 60 * 60 * 1000)) {
+            if (splitByTime && (Math.abs(tab.lastAccessed - privTime) > 4 * 60 * 60 * 1000)) {
                 const separatorEl = document.createElement('div');
                 separatorEl.classList.add("separator");
                 separatorEl.innerText = new Date(tab.lastAccessed).toLocaleString();
@@ -288,40 +293,64 @@ function onQueryInputChange(event) {
     renderTabs().then(() => {});
 }
 
-document.getElementById('queryInput').addEventListener('input', onQueryInputChange);
+const queryInputEl = document.getElementById('queryInput');
+queryInputEl.addEventListener('input', onQueryInputChange);
 
-let sortByUrl = false;
+let close_tab_on_click = false;
+document.addEventListener('keydown', (e) => {
+    if (e.target === queryInputEl) return;
+    if (e.key == "Alt") {
+        close_tab_on_click = true;
+        rootEl.classList.add('close-tab-on-click');
+    }
+});
+document.addEventListener('keyup', (e) => {
+    if (e.target === queryInputEl) return;
+    if (e.key == "Alt") {
+        close_tab_on_click = false;
+        rootEl.classList.remove('close-tab-on-click');
+    }
+});
+
+
+let sortByUrl = localStorage['cfg-sort-by-url'] === '1';
 
 function onSortChange(event) {
     closeAllTabPopovers();
     sortByUrl = event.target.checked;
+    localStorage['cfg-sort-by-url'] = sortByUrl ? '1' : '0';
     renderTabs().then(() => {});
 }
 
-document.getElementById('sortByUrl').addEventListener('change', onSortChange);
-document.getElementById('sortByUrl').checked = false;
+const sortByUrlEl = document.getElementById('sortByUrl');
+sortByUrlEl.addEventListener('change', onSortChange);
+sortByUrlEl.checked = sortByUrl;
 
-let queryIsRegex = false;
+let queryIsRegex = localStorage['cfg-regex'] === '1';
 
 function onQueryIsRegexChange(event) {
     closeAllTabPopovers();
     queryIsRegex = event.target.checked;
+    localStorage['cfg-regex'] = queryIsRegex ? '1' : '0';
     renderTabs().then(() => {});
 }
 
-document.getElementById('queryIsRegex').addEventListener('change', onQueryIsRegexChange);
-document.getElementById('queryIsRegex').checked = false;
+const queryIsRegexEl = document.getElementById('queryIsRegex');
+queryIsRegexEl.addEventListener('change', onQueryIsRegexChange);
+queryIsRegexEl.checked = queryIsRegex;
 
-let separateByTime = false;
+let splitByTime = localStorage['cfg-split-by-time'] === '1';
 
-function onSeparateByTimeChange(event) {
+function onSplitByTimeChange(event) {
     closeAllTabPopovers();
-    separateByTime = event.target.checked;
+    splitByTime = event.target.checked;
+    localStorage['cfg-split-by-time'] = splitByTime ? '1' : '0';
     renderTabs().then(() => {});
 }
 
-document.getElementById('separateByTime').addEventListener('change', onSeparateByTimeChange);
-document.getElementById('separateByTime').checked = false;
+const splitByTimeEl = document.getElementById('splitByTime');
+splitByTimeEl.addEventListener('change', onSplitByTimeChange);
+splitByTimeEl.checked = splitByTime;
 
 // function onKeyupHotkey(event) {
 //     console.log(event);
