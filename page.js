@@ -6,16 +6,16 @@ document.querySelectorAll('form').forEach(el => {
     });
 });
 
-const tabElId = (tabId) => `tab_${tabId}`;
+const tabElId = (tabId) => `t_${tabId}`;
 
 function getTabIdFromEvent(event) {
-    return parseInt(event.target.closest('.tab').dataset['id'], 10);
+    return parseInt(event.target.closest('.tab').id.slice(2), 10);
 }
 
 async function onTabClick(event) {
     event.preventDefault();
     const tabId = getTabIdFromEvent(event);
-    if (close_tab_on_click) {
+    if (closeTabOnClick) {
         await browser.tabs.remove(tabId);
     } else {
         await browser.tabs.update(tabId, {active: true, highlighted: false});
@@ -53,6 +53,10 @@ function closeAllTabPopovers() {
 async function showTabPopover(event) {
     const tabId = getTabIdFromEvent(event);
     const tab = await browser.tabs.get(tabId);
+    // get container
+    if (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') {
+        tab.container = await browser.contextualIdentities.get(tab.cookieStoreId);
+    }
 
     const tabEl = document.getElementById(tabElId(tabId));
 
@@ -64,6 +68,9 @@ async function showTabPopover(event) {
     el.style['position'] = 'absolute';
     el.style['top'] = `${pos.top + pos.height + window.scrollY}px`;
     el.style['left'] = `${pos.left + window.scrollX}px`;
+    if (tab.container) {
+        el.style['border-color'] = `${tab.container.colorCode}`;
+    }
 
     const elTitle = document.createElement('div');
     elTitle.classList.add("tabPopoverTitle");
@@ -100,29 +107,24 @@ async function closeTabPopover(event) {
 const createTabEl = (tab) => {
     const tabEl = document.createElement('div');
     tabEl.id = tabElId(tab.id);
-    tabEl.dataset['id'] = tab.id;
     tabEl.classList.add("tab");
     // if (tab.active) tabEl.classList.add("tabActive");
     // if (tab.highlighted) tabEl.classList.add("tabHighlighted");
 
-    const tabIconContainerEl = document.createElement('div');
-    tabIconContainerEl.classList.add("tabIconContainer");
-    tabEl.appendChild(tabIconContainerEl);
+    if (tab.container) {
+        tabEl.style['border-top'] = `1.5px solid ${tab.container.colorCode}`;
+    }
 
     if (tab.favIconUrl) {
         const tabIcon = document.createElement('img');
         tabIcon.classList.add("tabIcon");
         tabIcon.src = tab.favIconUrl;
-        tabIconContainerEl.appendChild(tabIcon);
+        tabIcon.loading = 'lazy';
+        tabIcon.decoding = 'async';
+        tabEl.appendChild(tabIcon);
     }
 
-    const tabTitle = document.createElement('span');
-    tabTitle.classList.add("tabTitle");
-    tabTitle.innerText = tab.title;
-    // tabTitle.innerText = tab.title.replace(/[\S]/gi, '▓');
-    // tabTitle.innerText = new Date(tab.lastAccessed).toLocaleString();
-
-    tabEl.appendChild(tabTitle);
+    tabEl.appendChild(document.createTextNode(tab.title));
 
     tabEl.addEventListener('click', onTabClick);
     tabEl.addEventListener('auxclick', onTabAuxclick);
@@ -157,31 +159,52 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 async function _renderTabs() {
     const currentWindowId = (await browser.windows.getCurrent()).id;
-    let tabs = await browser.tabs.query({});
 
-    if (query) {
+    const containers = await browser.contextualIdentities.query({});
+    const containerByCookieStoreId = {};
+    for (let container of containers) {
+        containerByCookieStoreId[container.cookieStoreId] = container;
+    }
+
+    const tabsFilters = {};
+    if (containerFilterValue) {
+        tabsFilters.cookieStoreId = containerFilterValue;
+    }
+    let tabs = await browser.tabs.query(tabsFilters);
+
+    if (query || queryNegativeRegexp) {
         let newTabs = [];
-
         for (let tab of tabs) {
-            let tabMatching = false;
-
-            if (queryIsRegex) {
-                tabMatching = (
-                    (tab.title && queryRegexp.test(tab.title)) ||
-                    (tab.url && queryRegexp.test(tab.url))
-                );
-            } else {
-                tabMatching = (
-                    (tab.title && tab.title.indexOf(query) >= 0) ||
-                    (tab.url && tab.url.indexOf(query) >= 0)
-                );
+            let tabMatching = !query;
+            if (query) {
+                if (queryIsRegex) {
+                    tabMatching = (
+                        (tab.title && queryRegexp.test(tab.title)) ||
+                        (tab.url && queryRegexp.test(tab.url))
+                    );
+                } else {
+                    tabMatching = (
+                        (tab.title && tab.title.indexOf(query) >= 0) ||
+                        (tab.url && tab.url.indexOf(query) >= 0)
+                    );
+                }
+            }
+            if (tabMatching && queryNegativeRegexp) {
+                if (
+                    (tab.title && queryNegativeRegexp.test(tab.title)) ||
+                    (tab.url && queryNegativeRegexp.test(tab.url))
+                ) {
+                    tabMatching = false;
+                }
             }
             if (!tabMatching) continue;
-            
             newTabs.push(tab);
         }
-
         tabs = newTabs;
+    }
+
+    for (let tab of tabs) {
+        tab.container = containerByCookieStoreId[tab.cookieStoreId];
     }
 
     if (sortByUrl) {
@@ -276,42 +299,49 @@ async function renderTabs() {
     rendering = false;
 }
 
-browser.tabs.onCreated.addListener((tabId) => {
-    renderTabs().then(() => {});
-})
+browser.tabs.onCreated.addListener((tabId) => { renderTabs().then(() => {}) });
 
+let closeTabOnClick = false;
+document.addEventListener('keydown', (e) => {
+    if (e.key !== "Alt") return;
+    closeTabOnClick = true;
+    rootEl.classList.add('close-tab-on-click');
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key !== "Alt") return;
+    closeTabOnClick = false;
+    rootEl.classList.remove('close-tab-on-click');
+});
 
+// QUERY
 let query = '';
-let queryRegexp = '';
+let queryRegexp = new RegExp('', 'ig');
 
 function onQueryInputChange(event) {
     closeAllTabPopovers();
-
     query = event.target.value.trimStart();
     queryRegexp = new RegExp(query, 'ig');
-
     renderTabs().then(() => {});
 }
 
 const queryInputEl = document.getElementById('queryInput');
 queryInputEl.addEventListener('input', onQueryInputChange);
 
-let close_tab_on_click = false;
-document.addEventListener('keydown', (e) => {
-    if (e.target === queryInputEl) return;
-    if (e.key == "Alt") {
-        close_tab_on_click = true;
-        rootEl.classList.add('close-tab-on-click');
-    }
-});
-document.addEventListener('keyup', (e) => {
-    if (e.target === queryInputEl) return;
-    if (e.key == "Alt") {
-        close_tab_on_click = false;
-        rootEl.classList.remove('close-tab-on-click');
-    }
-});
-
+// QUERY NEGATIVE
+let queryNegativeRegexp = null;
+function setQueryNegativeRegexp(s) {
+    queryNegativeRegexp = s ? new RegExp(s, 'ig') : null;
+    localStorage['cfg-query-negative'] = s || '';
+}
+setQueryNegativeRegexp(localStorage['cfg-query-negative']);
+function onQueryNegativeInputChange(event) {
+    closeAllTabPopovers();
+    setQueryNegativeRegexp(event.target.value);
+    renderTabs().then(() => {});
+}
+const queryNegativeInputEl = document.getElementById('queryNegativeInput');
+queryNegativeInputEl.addEventListener('input', onQueryNegativeInputChange);
+queryNegativeInputEl.value = localStorage['cfg-query-negative'];
 
 let sortByUrl = localStorage['cfg-sort-by-url'] === '1';
 
@@ -352,9 +382,27 @@ const splitByTimeEl = document.getElementById('splitByTime');
 splitByTimeEl.addEventListener('change', onSplitByTimeChange);
 splitByTimeEl.checked = splitByTime;
 
-// function onKeyupHotkey(event) {
-//     console.log(event);
-// }
-// window.addEventListener('keyup', onKeyupHotkey);
+let containerFilterValue = '';
+
+function onFilterByContainerChange(event) {
+    closeAllTabPopovers();
+    containerFilterValue = event.target.value;
+    renderTabs().then(() => {});
+}
+
+const filterByContainerEl = document.getElementById('filterByContainer');
+filterByContainerEl.addEventListener('input', onFilterByContainerChange);
+
+(async () => {
+    const containers = await browser.contextualIdentities.query({});
+    if (!containers.length) return;
+    for (let container of containers) {
+        const optionEl = document.createElement('option');
+        optionEl.value = container.cookieStoreId;
+        optionEl.innerText = container.name;
+        filterByContainerEl.appendChild(optionEl);
+    }
+    filterByContainerEl.parentElement.style.display = 'block';
+})().then(() => {});
 
 renderTabs().then(()=>{});

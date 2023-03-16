@@ -2,7 +2,7 @@
   "description": "Simple tab manager.",
   "manifest_version": 2,
   "name": "OverTab",
-  "version": "2.1",
+  "version": "2.2",
   "icons": {
     "128": "icon.png"
   },
@@ -14,5 +14,5 @@
   "browser_action": {
     "default_icon": "icon.png"
   },
-  "permissions": ["tabs"]
+  "permissions": ["tabs", "contextualIdentities"]
 }

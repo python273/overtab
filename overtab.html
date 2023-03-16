@@ -19,16 +19,19 @@
       --bg-color: #fff;
       --text-color: rgb(1, 9, 17);
       --window-border-color: #ecedee;
+      --tab-bg-hover: #0000000a;
     }
-
     @media (prefers-color-scheme: dark) {
       :root {
         --brand-color: #b75cff;
         --bg-color: rgb(37, 36, 51);
         --text-color: rgb(221, 235, 251);
         --window-border-color: rgb(26, 20, 34);
+        --tab-bg-hover: #ffffff0a;
       }
     }
+
+    .flex { display: flex; }
 
     html, body {
         background-color: var(--bg-color);
@@ -58,13 +61,14 @@
         border-bottom: 3px solid var(--window-border-color);
         margin-bottom: 10px;
         padding-bottom: 10px;
+        contain: content;
     }
 
     .subgroup:last-child {
         border-bottom: none;
     }
 
-    .tabIconContainer {
+    .tabIcon {
       display: inline-block;
       width: 1em;
       height: 1em;
@@ -72,22 +76,22 @@
       margin-right: 0.3em;
     }
 
-    .tabIcon {
-        height: 100%;
-        max-height: 1em;
-    }
-
     .tabTitle {
         height: 1em;
     }
 
     .tab {
-        cursor: pointer;
-        padding: 5px 10px;
+      cursor: pointer;
+      padding: 5px 10px;
 
-        white-space: nowrap;
-        overflow: hidden;
-        font-size: 1em;
+      white-space: nowrap;
+      overflow: hidden;
+      font-size: 0.9em;
+
+      contain: content;
+    }
+    .tab:hover {
+      background-color: var(--tab-bg-hover);
     }
 
     .tabHighlighted {
@@ -116,28 +120,29 @@
         padding-bottom: 1em;
     }
 
-    .flex {
+    form {
       display: flex;
+      gap: 10px;
     }
-
-    #queryInput {
-        width: calc(100%);
+    #queryInput, #queryNegativeInput {
+        flex: 1;
         padding: 5px;
-        background: transparent;
-        border: 2px solid var(--brand-color);
-        background-color: var(--window-border-color);
-        border-radius: 5px;
-        color: #fff;
         font-size: 1.1em;
     }
 
-    .header {
-      margin-bottom: 4px;
-      border-bottom: 2px solid var(--window-border-color);
+    input, select {
+      background-color: var(--window-border-color);
+      border: 1.5px solid var(--brand-color);
+      border-radius: 5px;
+      color: #fff;
     }
 
-    .header > div {
-      padding: 5px;
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      border-bottom: 2px solid var(--window-border-color);
+      margin: 10px;
     }
 
     .separator {
@@ -152,14 +157,24 @@
       height: 50vh
     }
 
-    .checkboxes {
+    .viewSettings {
       display: flex;
       gap: 12px;
       font-family: monospace;
+      margin: 2px 0;
+    }
+    .viewSettings > div {
+      display: flex;
+      align-items: center;
     }
 
     .close-tab-on-click .tab:hover {
       color: #ff4c4c;
+    }
+
+    #filterByContainer {
+      padding: 2px;
+      font-size: 0.8em;
     }
   </style>
 </head>
@@ -167,7 +182,7 @@
 <body>
   <div class="header">
     <div>
-      <form class="flex">
+      <form>
         <input
           id='queryInput'
           autocomplete="off"
@@ -175,12 +190,24 @@
           placeholder='Search...'
           autofocus
         />
+        <input
+          id='queryNegativeInput'
+          autocomplete="off"
+          type='text' value=''
+          placeholder='Exclude tabs (regex) ...'
+          autofocus
+        />
       </form>
     </div>
-    <div class="checkboxes">
-      <div class="flex"><input id="queryIsRegex" type="checkbox"/>&nbsp;<div>Regex</div></div>
-      <div class="flex"><input id="sortByUrl" type="checkbox"/>&nbsp;<div>Sort by URL</div></div>
-      <div class="flex"><input id="splitByTime" type="checkbox"/>&nbsp;<div>Split by time</div></div>
+    <div class="viewSettings">
+      <div><input id="queryIsRegex" type="checkbox"/>&nbsp;<div>Regex</div></div>
+      <div><input id="sortByUrl" type="checkbox"/>&nbsp;<div>Sort by URL</div></div>
+      <div><input id="splitByTime" type="checkbox"/>&nbsp;<div>Split by time</div></div>
+      <div id="filterByContainerEl" style="display: none;">
+        <select id="filterByContainer">
+          <option value="">All containers</option>
+        </select>
+      </div>
     </div>
   </div>
   <div id="root"></div>
