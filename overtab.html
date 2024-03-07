@@ -134,7 +134,7 @@
       background-color: var(--window-border-color);
       border: 1.5px solid var(--brand-color);
       border-radius: 5px;
-      color: #fff;
+      color: var(--text-color);
     }
 
     .header {
@@ -168,9 +168,8 @@
       align-items: center;
     }
 
-    .close-tab-on-click .tab:hover {
-      color: #ff4c4c;
-    }
+    .close-tab-on-click .tab:hover { color: #ff4c4c; }
+    .discard-tab-on-click .tab:hover { color: #4f6aff; }
 
     #filterByContainer {
       padding: 2px;
@@ -194,7 +193,7 @@
           id='queryNegativeInput'
           autocomplete="off"
           type='text' value=''
-          placeholder='Exclude tabs (regex) ...'
+          placeholder='Exclude tabs... (regex)'
           autofocus
         />
       </form>
@@ -203,6 +202,7 @@
       <div><input id="queryIsRegex" type="checkbox"/>&nbsp;<div>Regex</div></div>
       <div><input id="sortByUrl" type="checkbox"/>&nbsp;<div>Sort by URL</div></div>
       <div><input id="splitByTime" type="checkbox"/>&nbsp;<div>Split by time</div></div>
+      <div><input id="showOnlyInRam" type="checkbox"/>&nbsp;<div>Only in RAM</div></div>
       <div id="filterByContainerEl" style="display: none;">
         <select id="filterByContainer">
           <option value="">All containers</option>

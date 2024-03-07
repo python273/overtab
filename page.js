@@ -15,7 +15,10 @@ function getTabIdFromEvent(event) {
 async function onTabClick(event) {
     event.preventDefault();
     const tabId = getTabIdFromEvent(event);
-    if (closeTabOnClick) {
+    if (discardTabOnClick) {
+        document.getSelection().removeAllRanges();
+        await browser.tabs.discard(tabId);
+    } else if (closeTabOnClick) {
         await browser.tabs.remove(tabId);
     } else {
         await browser.tabs.update(tabId, {active: true, highlighted: false});
@@ -170,6 +173,9 @@ async function _renderTabs() {
     if (containerFilterValue) {
         tabsFilters.cookieStoreId = containerFilterValue;
     }
+    if (showOnlyInRam) {
+        tabsFilters.discarded = false;
+    }
     let tabs = await browser.tabs.query(tabsFilters);
 
     if (query || queryNegativeRegexp) {
@@ -313,6 +319,18 @@ document.addEventListener('keyup', (e) => {
     rootEl.classList.remove('close-tab-on-click');
 });
 
+let discardTabOnClick = false;
+document.addEventListener('keydown', (e) => {
+    if (e.key !== "Shift") return;
+    discardTabOnClick = true;
+    rootEl.classList.add('discard-tab-on-click');
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key !== "Shift") return;
+    discardTabOnClick = false;
+    rootEl.classList.remove('discard-tab-on-click');
+});
+
 // QUERY
 let query = '';
 let queryRegexp = new RegExp('', 'ig');
@@ -381,6 +399,19 @@ function onSplitByTimeChange(event) {
 const splitByTimeEl = document.getElementById('splitByTime');
 splitByTimeEl.addEventListener('change', onSplitByTimeChange);
 splitByTimeEl.checked = splitByTime;
+
+let showOnlyInRam = localStorage['cfg-show-only-in-ram'] === '1';
+
+function onShowOnlyInRamChange(event) {
+    closeAllTabPopovers();
+    showOnlyInRam = event.target.checked;
+    localStorage['cfg-show-only-in-ram'] = showOnlyInRam ? '1' : '0';
+    renderTabs().then(() => {});
+}
+
+const showOnlyInRamEl = document.getElementById('showOnlyInRam');
+showOnlyInRamEl.addEventListener('change', onShowOnlyInRamChange);
+showOnlyInRamEl.checked = showOnlyInRam;
 
 let containerFilterValue = '';
 
