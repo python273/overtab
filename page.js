@@ -352,11 +352,26 @@ queryInputEl.addEventListener('input', onQueryInputChange);
 
 // QUERY NEGATIVE
 let queryNegativeRegexp = null;
+let queryNegativeEnabled = localStorage['cfg-query-negative-enabled'] === '1';
+
 function setQueryNegativeRegexp(s) {
-    queryNegativeRegexp = s ? new RegExp(s, 'ig') : null;
+    queryNegativeRegexp = queryNegativeEnabled && s ? new RegExp(s, 'ig') : null;
     localStorage['cfg-query-negative'] = s || '';
 }
 setQueryNegativeRegexp(localStorage['cfg-query-negative']);
+
+function onQueryNegativeEnabledChange(event) {
+    closeAllTabPopovers();
+    queryNegativeEnabled = event.target.checked;
+    localStorage['cfg-query-negative-enabled'] = queryNegativeEnabled ? '1' : '0';
+    setQueryNegativeRegexp(queryNegativeInputEl.value);
+    renderTabs().then(() => {});
+}
+
+const queryNegativeEnabledEl = document.getElementById('queryNegativeEnabled');
+queryNegativeEnabledEl.addEventListener('change', onQueryNegativeEnabledChange);
+queryNegativeEnabledEl.checked = queryNegativeEnabled;
+
 function onQueryNegativeInputChange(event) {
     closeAllTabPopovers();
     setQueryNegativeRegexp(event.target.value);
