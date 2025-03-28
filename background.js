@@ -1,3 +1,5 @@
+const browser = window.msBrowser || window.browser || window.chrome;
+
 browser.browserAction.onClicked.addListener(() => {
   browser.tabs.create({'url': '/overtab.html'});
 });
@@ -40,20 +42,24 @@ async function discardTab(tab) {
   await browser.tabs.discard(tab.id);
 }
 
-browser.contextMenus.create({
-    id: 'discard-tab',
-    title: 'Discard tab',
-    contexts: ['tab'],
-});
-browser.contextMenus.create({
-    contexts: ['tab'],
-    type: 'separator',
-});
-browser.contextMenus.create({
-    id: 'move-website-tabs-to-right',
-    title: 'Move website tabs to right',
-    contexts: ['tab'],
-});
+try {
+  browser.contextMenus.create({
+      id: 'discard-tab',
+      title: 'Discard tab',
+      contexts: ['tab'],
+  });
+  browser.contextMenus.create({
+      contexts: ['tab'],
+      type: 'separator',
+  });
+  browser.contextMenus.create({
+      id: 'move-website-tabs-to-right',
+      title: 'Move website tabs to right',
+      contexts: ['tab'],
+  });
+} catch (e) {
+
+}
 
 browser.contextMenus.onClicked.addListener(async (info, tab) => {
   switch (info.menuItemId) {

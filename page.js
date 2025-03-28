@@ -1,3 +1,5 @@
+const browser = window.msBrowser || window.browser || window.chrome;
+
 const rootEl = document.querySelector('#root');
 
 document.querySelectorAll('form').forEach(el => {
@@ -8,8 +10,12 @@ document.querySelectorAll('form').forEach(el => {
 
 const tabElId = (tabId) => `t_${tabId}`;
 
+function getTabIdFromElement(tabEl) {
+    return parseInt(tabEl.id.slice(2), 10);
+}
+
 function getTabIdFromEvent(event) {
-    return parseInt(event.target.closest('.tab').id.slice(2), 10);
+    return getTabIdFromElement(event.target.closest('.tab'));
 }
 
 async function onTabClick(event) {
@@ -33,18 +39,6 @@ async function onTabAuxclick(event) {
     await browser.tabs.remove(tabId);
 }
 
-/*
-async function highlightTab(event) {
-    const tabId = getTabIdFromEvent(event);
-    await browser.tabs.update(tabId, {active: false, highlighted: true});
-}
-
-async function unhighlightTab(event) {
-    const tabId = getTabIdFromEvent(event);
-    await browser.tabs.update(tabId, {active: false, highlighted: false});
-}
-*/
-
 function closeAllTabPopovers() {
     const els = document.querySelectorAll('.tabPopover');
     for (const el of els) {
@@ -55,7 +49,9 @@ function closeAllTabPopovers() {
 
 async function showTabPopover(event) {
     const tabId = getTabIdFromEvent(event);
-    const tab = await browser.tabs.get(tabId);
+    const tab = await new Promise(resolve => {
+        browser.tabs.get(tabId, resolve);
+    });
     // get container
     if (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') {
         tab.container = await browser.contextualIdentities.get(tab.cookieStoreId);
@@ -80,7 +76,8 @@ async function showTabPopover(event) {
     elTitle.innerText = tab.title;
     el.appendChild(elTitle);
 
-    const elUrl = document.createElement('div');
+    const elUrl = document.createElement('a');
+    elUrl.href = tab.url;
     elUrl.innerText = tab.url;
     el.appendChild(elUrl);
 
@@ -161,9 +158,14 @@ browser.tabs.onRemoved.addListener((tabId) => {
 })
 
 async function _renderTabs() {
-    const currentWindowId = (await browser.windows.getCurrent()).id;
+    const currentWindowId = await new Promise(resolve => {
+        browser.windows.getCurrent({}, window => { resolve(window.id) });
+    });
 
-    const containers = await browser.contextualIdentities.query({});
+    let containers = [];
+    try {
+        containers = await browser.contextualIdentities.query({});
+    } catch (e) { }
     const containerByCookieStoreId = {};
     for (let container of containers) {
         containerByCookieStoreId[container.cookieStoreId] = container;
@@ -176,7 +178,9 @@ async function _renderTabs() {
     if (showOnlyInRam) {
         tabsFilters.discarded = false;
     }
-    let tabs = await browser.tabs.query(tabsFilters);
+    let tabs = await new Promise(resolve => {
+        browser.tabs.query(tabsFilters, resolve);
+    });
 
     if (query || queryNegativeRegexp) {
         let newTabs = [];
@@ -244,13 +248,14 @@ async function _renderTabs() {
         return 0;
     });
 
-    for(let windowId of windowIds) {
+    for (let windowId of windowIds) {
         const windowTabs = tabsByWindows[windowId];
         if (!windowTabs.length) {
             continue;
         }
 
         const windowEl = document.createElement('div');
+        windowEl.id = `window_${windowId}`;
         windowEl.classList.add("window");
         windowsEl.appendChild(windowEl);
 
@@ -425,7 +430,10 @@ const filterByContainerEl = document.getElementById('filterByContainer');
 filterByContainerEl.addEventListener('input', onFilterByContainerChange);
 
 (async () => {
-    const containers = await browser.contextualIdentities.query({});
+    let containers = [];
+    try {
+        containers = await browser.contextualIdentities.query({});
+    } catch (e) { }
     if (!containers.length) return;
     for (let container of containers) {
         const optionEl = document.createElement('option');
@@ -435,5 +443,64 @@ filterByContainerEl.addEventListener('input', onFilterByContainerChange);
     }
     filterByContainerEl.parentElement.style.display = 'block';
 })().then(() => {});
+
+document.getElementById('save-window').addEventListener('click', async () => {
+    if (!confirm('Save window?')) return;
+
+    const now = new Date();
+    const folderName = `tabs_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const containerCache = {};
+    try {
+        (await browser.contextualIdentities.query({})).forEach(container => {
+            containerCache[container.cookieStoreId] = container.name;
+        });
+    } catch (e) { }
+
+    const folder = await new Promise(resolve => {
+        browser.bookmarks.create({ title: folderName }, resolve);
+    });
+    const tabs = await new Promise(resolve => {
+        browser.tabs.query({ currentWindow: true }, resolve);
+    });
+
+    for (const tab of tabs) {
+        const containerName = containerCache[tab.cookieStoreId] || '';
+        let title = tab.title;
+        if (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') {
+            title = `%${containerName}% ${tab.title}`;
+        }
+        await new Promise(resolve => {
+            browser.bookmarks.create({
+                parentId: folder.id,
+                title: title,
+                url: tab.url
+            }, resolve);
+        });
+    }
+
+    alert(`Saved as ${folderName}`);
+});
+
+// document.getElementById('sort-by-url-browser').addEventListener('click', async () => {
+//     if (!confirm('Sort browser tabs by URL?')) return;
+//     const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
+//     currentWindowTabs.sort((a, b) => a.url.localeCompare(b.url));
+//     for (let i = 0; i < currentWindowTabs.length; i++) {
+//         await browser.tabs.move(currentWindowTabs[i].id, { index: i });
+//     }
+// });
+
+document.getElementById('unload-visible-tabs').addEventListener('click', async function () {
+    if (!confirm('Unload visible tabs?')) return;
+    const currentWindowId = await new Promise(resolve => {
+        browser.windows.getCurrent({}, window => { resolve(window.id) });
+    });
+    const tabElements = document.querySelectorAll(`#window_${currentWindowId} .tab`);
+    for (const tabEl of tabElements) {
+        const tabId = getTabIdFromElement(tabEl);
+        await browser.tabs.discard(tabId);
+    }
+});
 
 renderTabs().then(()=>{});

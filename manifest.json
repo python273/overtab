@@ -2,7 +2,7 @@
   "description": "Simple tab manager.",
   "manifest_version": 2,
   "name": "OverTab",
-  "version": "3.0",
+  "version": "3.1",
   "icons": {
     "128": "icon.png"
   },
@@ -14,5 +14,5 @@
   "browser_action": {
     "default_icon": "icon.png"
   },
-  "permissions": ["tabs", "contextualIdentities", "contextMenus"]
+  "permissions": ["tabs", "contextualIdentities", "contextMenus", "bookmarks"]
 }
