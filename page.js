@@ -1,4 +1,10 @@
 const browser = window.msBrowser || window.browser || window.chrome;
+const ezEl = (tag, parent, attributes = {}) => {
+    const el = document.createElement(tag);
+    Object.assign(el, attributes);
+    parent && parent.appendChild(el);
+    return el;
+};
 
 const rootEl = document.querySelector('#root');
 
@@ -61,31 +67,40 @@ async function showTabPopover(event) {
 
     const pos = tabEl.getBoundingClientRect();
 
-    const el = document.createElement('div');
-    el.id = `tab_popover_${tabId}`;
-    el.classList.add("tabPopover");
-    el.style['position'] = 'absolute';
-    el.style['top'] = `${pos.top + pos.height + window.scrollY}px`;
-    el.style['left'] = `${pos.left + window.scrollX}px`;
-    if (tab.container) {
-        el.style['border-color'] = `${tab.container.colorCode}`;
-    }
-
-    const elTitle = document.createElement('div');
-    elTitle.classList.add("tabPopoverTitle");
-    elTitle.innerText = tab.title;
-    el.appendChild(elTitle);
-
-    const elUrl = document.createElement('a');
-    elUrl.href = tab.url;
-    elUrl.innerText = tab.url;
-    el.appendChild(elUrl);
-
-    el.addEventListener('mouseenter', () => {
-        if (popoverTimeoutId) {
-            clearTimeout(popoverTimeoutId);
+    const el = ezEl('div', null, {
+        id: `tab_popover_${tabId}`,
+        classList: ['tabPopover'],
+        style: `
+            position: absolute;
+            top: ${pos.top + pos.height + window.scrollY}px;
+            left: ${pos.left + window.scrollX}px;
+            ${tab.container ? `border-color: ${tab.container.colorCode};` : ''}
+        `,
+        onmouseenter: () => {
+            if (popoverTimeoutId) { clearTimeout(popoverTimeoutId); }
         }
-    })
+    });
+
+    ezEl('div', el, {classList: ['tabPopoverTitle'], innerText: tab.title});
+    ezEl('a', el, {href: tab.url, innerText: tab.url});
+
+    const buttonsEl = ezEl('div', el, {classList: ['tabPopoverButtons']});
+    ezEl('div', buttonsEl, {
+        classList: ['tabPopoverButton'],
+        innerHTML: `Close<br/><div class='small'>(Alt + click on tab)</div>`,
+        onclick: async () => {
+            await browser.tabs.remove(tabId);
+            el.remove();
+        }
+    });
+    ezEl('div', buttonsEl, {
+        classList: ['tabPopoverButton'],
+        innerHTML: `Unload<br/><div class='small'>(Shift + click on tab)</div>`,
+        onclick: async () => {
+            await browser.tabs.discard(tabId);
+            el.remove();
+        }
+    });
 
     closeAllTabPopovers();
     document.body.appendChild(el);
@@ -105,32 +120,26 @@ async function closeTabPopover(event) {
 }
 
 const createTabEl = (tab) => {
-    const tabEl = document.createElement('div');
-    tabEl.id = tabElId(tab.id);
-    tabEl.classList.add("tab");
-    // if (tab.active) tabEl.classList.add("tabActive");
-    // if (tab.highlighted) tabEl.classList.add("tabHighlighted");
-
-    if (tab.container) {
-        tabEl.style['border-top'] = `1.5px solid ${tab.container.colorCode}`;
-    }
+    const tabEl = ezEl('div', null, {
+        id: tabElId(tab.id),
+        classList: ['tab'],
+        style: `${tab.container ? `border-top: 1.5px solid ${tab.container.colorCode};` : ''}`,
+        onclick: onTabClick,
+        onauxclick: onTabAuxclick,
+        onmouseenter: showTabPopover,
+        onmouseleave: closeTabPopover
+    });
 
     if (tab.favIconUrl) {
-        const tabIcon = document.createElement('img');
-        tabIcon.classList.add("tabIcon");
-        tabIcon.src = tab.favIconUrl;
-        tabIcon.loading = 'lazy';
-        tabIcon.decoding = 'async';
-        tabEl.appendChild(tabIcon);
+        ezEl('img', tabEl, {
+            classList: ['tabIcon'],
+            src: tab.favIconUrl,
+            loading: 'lazy',
+            decoding: 'async'
+        });
     }
 
     tabEl.appendChild(document.createTextNode(tab.title));
-
-    tabEl.addEventListener('click', onTabClick);
-    tabEl.addEventListener('auxclick', onTabAuxclick);
-    tabEl.addEventListener('mouseenter', showTabPopover);
-    tabEl.addEventListener('mouseleave', closeTabPopover);
-
     return tabEl;
 }
 
@@ -238,8 +247,7 @@ async function _renderTabs() {
         windowTabs.push(tab);
     }
 
-    const windowsEl = document.createElement('div');
-    windowsEl.id = "windows";
+    const windowsEl = ezEl('div', null, {id: 'windows'});
 
     // sort windows, first current window, then others
     const windowIds = Object.keys(tabsByWindows).sort((a, b) => {
@@ -254,27 +262,21 @@ async function _renderTabs() {
             continue;
         }
 
-        const windowEl = document.createElement('div');
-        windowEl.id = `window_${windowId}`;
-        windowEl.classList.add("window");
-        windowsEl.appendChild(windowEl);
-
-        let subgroupEl = document.createElement('div');
-        subgroupEl.classList.add("subgroup");
-        windowEl.appendChild(subgroupEl);
+        const windowEl = ezEl('div', windowsEl, {
+            id: `window_${windowId}`,
+            classList: ['window'],
+        });
+        let subgroupEl = ezEl('div', windowEl, {classList: ['subgroup']});
 
         let privTime = windowTabs[0].lastAccessed;
 
         for (let tab of windowTabs) {
             if (splitByTime && (Math.abs(tab.lastAccessed - privTime) > 4 * 60 * 60 * 1000)) {
-                const separatorEl = document.createElement('div');
-                separatorEl.classList.add("separator");
-                separatorEl.innerText = new Date(tab.lastAccessed).toLocaleString();
-                windowEl.appendChild(separatorEl);
-
-                subgroupEl = document.createElement('div');
-                subgroupEl.classList.add("subgroup");
-                windowEl.appendChild(subgroupEl);
+                ezEl('div', windowEl, {
+                    classList: ['separator'],
+                    innerText: new Date(tab.lastAccessed).toLocaleString()
+                });
+                subgroupEl = ezEl('div', windowEl, {classList: ['subgroup']});
             }
 
             privTime = tab.lastAccessed;
@@ -283,10 +285,7 @@ async function _renderTabs() {
         }
     }
 
-    const scrollEl = document.createElement('div');
-    scrollEl.classList.add("extra-scroll");
-    windowsEl.appendChild(scrollEl);
-
+    ezEl('div', windowsEl, {classList: 'extra-scroll'});
     rootEl.replaceChildren(windowsEl);
 }
 
@@ -451,10 +450,10 @@ filterByContainerEl.addEventListener('input', onFilterByContainerChange);
     } catch (e) { }
     if (!containers.length) return;
     for (let container of containers) {
-        const optionEl = document.createElement('option');
-        optionEl.value = container.cookieStoreId;
-        optionEl.innerText = container.name;
-        filterByContainerEl.appendChild(optionEl);
+        ezEl('option', filterByContainerEl, {
+            value: container.cookieStoreId,
+            innerText: container.name
+        });
     }
     filterByContainerEl.parentElement.style.display = 'block';
 })().then(() => {});

@@ -2,7 +2,7 @@
   "description": "Simple tab manager.",
   "manifest_version": 2,
   "name": "OverTab",
-  "version": "3.1",
+  "version": "3.2",
   "icons": {
     "128": "icon.png"
   },
