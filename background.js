@@ -14,7 +14,12 @@ async function moveWebsiteTabsToRight(tab) {
       url: `*://*.${currentTabUrl.hostname}/*`
   });
 
-  browser.tabs.move(tabs.map(t => t.id), {index: -1});
+  const filteredTabs = tabs.filter(t => {
+    const tabUrl = new URL(t.url);
+    return tabUrl.port === currentTabUrl.port;
+  });
+
+  browser.tabs.move(filteredTabs.map(t => t.id), {index: -1});
 }
 
 async function discardTab(tab) {
@@ -45,7 +50,7 @@ async function discardTab(tab) {
 try {
   browser.contextMenus.create({
       id: 'discard-tab',
-      title: 'Discard tab',
+      title: 'Unload tab',
       contexts: ['tab'],
   });
   browser.contextMenus.create({
