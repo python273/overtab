@@ -1,4 +1,12 @@
 const browser = window.msBrowser || window.browser || window.chrome;
+
+let activeTabIds = {}; // windowId -> tabId
+
+const isSidebar = window.location.search.includes('sidebar=1');
+if (isSidebar) document.body.classList.add('sidebar');
+
+const enableTabPopovers = !isSidebar;
+
 const ezEl = (tag, parent, attributes = {}) => {
     const el = document.createElement(tag);
     Object.assign(el, attributes);
@@ -54,6 +62,9 @@ function closeAllTabPopovers() {
 
 
 async function showTabPopover(event) {
+    if (!enableTabPopovers) {
+        return;
+    }
     const tabId = getTabIdFromEvent(event);
     const tab = await new Promise(resolve => {
         browser.tabs.get(tabId, resolve);
@@ -69,7 +80,7 @@ async function showTabPopover(event) {
 
     const el = ezEl('div', null, {
         id: `tab_popover_${tabId}`,
-        classList: ['tabPopover'],
+        className: 'tabPopover',
         style: `
             position: absolute;
             top: ${pos.top + pos.height + window.scrollY}px;
@@ -81,12 +92,12 @@ async function showTabPopover(event) {
         }
     });
 
-    ezEl('div', el, {classList: ['tabPopoverTitle'], innerText: tab.title});
+    ezEl('div', el, {className: 'tabPopoverTitle', innerText: tab.title});
     ezEl('a', el, {href: tab.url, innerText: tab.url});
 
-    const buttonsEl = ezEl('div', el, {classList: ['tabPopoverButtons']});
+    const buttonsEl = ezEl('div', el, {className: 'tabPopoverButtons'});
     ezEl('div', buttonsEl, {
-        classList: ['tabPopoverButton'],
+        className: 'tabPopoverButton',
         innerHTML: `Close<br/><div class='small'>(Alt + click on tab)</div>`,
         onclick: async () => {
             await browser.tabs.remove(tabId);
@@ -94,7 +105,7 @@ async function showTabPopover(event) {
         }
     });
     ezEl('div', buttonsEl, {
-        classList: ['tabPopoverButton'],
+        className: 'tabPopoverButton',
         innerHTML: `Unload<br/><div class='small'>(Shift + click on tab)</div>`,
         onclick: async () => {
             await browser.tabs.discard(tabId);
@@ -120,19 +131,26 @@ async function closeTabPopover(event) {
 }
 
 const createTabEl = (tab) => {
+    const classList = ['tab'];
+    if (tab.active) {
+        classList.push('tabActive');
+        activeTabIds[tab.windowId] = tab.id;
+    }
     const tabEl = ezEl('div', null, {
         id: tabElId(tab.id),
-        classList: ['tab'],
+        className: classList.join(' '),
         style: `${tab.container ? `border-top: 1.5px solid ${tab.container.colorCode};` : ''}`,
         onclick: onTabClick,
         onauxclick: onTabAuxclick,
-        onmouseenter: showTabPopover,
-        onmouseleave: closeTabPopover
+        ...(enableTabPopovers ? {
+            onmouseenter: showTabPopover,
+            onmouseleave: closeTabPopover
+        } : {})
     });
 
     if (tab.favIconUrl) {
         ezEl('img', tabEl, {
-            classList: ['tabIcon'],
+            className: 'tabIcon',
             src: tab.favIconUrl,
             loading: 'lazy',
             decoding: 'async'
@@ -154,6 +172,13 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 browser.tabs.onRemoved.addListener((tabId) => {
+    // Remove mapping if this tab was active in its window
+    for (const [winId, activeId] of Object.entries(activeTabIds)) {
+        if (activeId === tabId) {
+            delete activeTabIds[winId];
+            break;
+        }
+    }
     const selectorsToRemove = [
         `#${tabElId(tabId)}`,
         `#tab_popover_${tabId}`,
@@ -166,7 +191,19 @@ browser.tabs.onRemoved.addListener((tabId) => {
     }
 })
 
+browser.tabs.onActivated.addListener((activeInfo) => {
+    const {tabId, windowId} = activeInfo;
+
+    Array.from(document.querySelectorAll(`#window_${windowId} .tabActive`))
+        .forEach(i => i.classList.remove('tabActive'))
+
+    document.getElementById(tabElId(tabId))?.classList.add('tabActive');
+    activeTabIds[windowId] = tabId;
+});
+
 async function _renderTabs() {
+    // Reset active tab mapping, will be rebuilt from current tab data
+    activeTabIds = {};
     const currentWindowId = await new Promise(resolve => {
         browser.windows.getCurrent({}, window => { resolve(window.id) });
     });
@@ -186,6 +223,9 @@ async function _renderTabs() {
     }
     if (showOnlyInRam) {
         tabsFilters.discarded = false;
+    }
+    if (isSidebar) {
+        tabsFilters.windowId = currentWindowId;
     }
     let tabs = await new Promise(resolve => {
         browser.tabs.query(tabsFilters, resolve);
@@ -264,19 +304,19 @@ async function _renderTabs() {
 
         const windowEl = ezEl('div', windowsEl, {
             id: `window_${windowId}`,
-            classList: ['window'],
+            className: 'window',
         });
-        let subgroupEl = ezEl('div', windowEl, {classList: ['subgroup']});
+        let subgroupEl = ezEl('div', windowEl, {className: 'subgroup'});
 
         let privTime = windowTabs[0].lastAccessed;
 
         for (let tab of windowTabs) {
             if (splitByTime && (Math.abs(tab.lastAccessed - privTime) > 4 * 60 * 60 * 1000)) {
                 ezEl('div', windowEl, {
-                    classList: ['separator'],
+                    className: 'separator',
                     innerText: new Date(tab.lastAccessed).toLocaleString()
                 });
-                subgroupEl = ezEl('div', windowEl, {classList: ['subgroup']});
+                subgroupEl = ezEl('div', windowEl, {className: 'subgroup'});
             }
 
             privTime = tab.lastAccessed;
@@ -285,7 +325,7 @@ async function _renderTabs() {
         }
     }
 
-    ezEl('div', windowsEl, {classList: 'extra-scroll'});
+    ezEl('div', windowsEl, {className: 'extra-scroll'});
     rootEl.replaceChildren(windowsEl);
 }
 

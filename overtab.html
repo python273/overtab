@@ -204,6 +204,44 @@
     .small {
       font-size: 0.75em;
     }
+
+    .sidebar .subgroup {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar .window {
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .sidebar .tab {
+        padding: 4px 4px;
+    }
+
+    .sidebar .ml-auto {
+      display: none;
+    }
+    .sidebar .current-window-section {
+      display: none;
+    }
+
+    @media (max-width: 600px) {
+      .header form {
+        flex-direction: column;
+        gap: 5px;
+      }
+      .header {
+        margin: 5px;
+        border-bottom: 1px solid var(--window-border-color);
+      }
+      .viewSettings {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .current-window-section {
+        display: none;
+      }
+    }
   </style>
 </head>
 
@@ -239,10 +277,12 @@
         </select>
       </div>
       <div class="ml-auto"></div>
-      <div>Current Window:</div>
-      <!--<div><button id="sort-by-url-browser">Sort Tabs by URL</button></div>-->
-      <div><button id="unload-visible-tabs">Unload Visible Tabs</button></div>
-      <div><button id="save-window">Bookmark Tabs</button></div>
+      <div class="current-window-section">
+        <div>Current Window:</div>
+        <!--<div><button id="sort-by-url-browser">Sort Tabs by URL</button></div>-->
+        <div><button id="unload-visible-tabs">Unload Visible Tabs</button></div>
+        <div><button id="save-window">Bookmark Tabs</button></div>
+      </div>
     </div>
   </div>
   <div id="root"></div>
