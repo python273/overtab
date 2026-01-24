@@ -5,6 +5,7 @@
 <head>
   <meta charset="utf-8">
   <title>OverTab</title>
+  <link rel="icon" type="image/png" href="icon.png" />
   <style>
     * {
       margin: 0;
@@ -13,9 +14,34 @@
     }
   </style>
   <style id="style">
-    body {
-        background-color: #030f0b;
-        color: #d7dbec;
+    :root {
+      --brand-color: #9234df;
+      --bg-color: #fff;
+      --text-color: rgb(1, 9, 17);
+      --window-border-color: #ecedee;
+      --tab-bg-hover: #0000000a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --brand-color: #b75cff;
+        --bg-color: rgb(37, 36, 51);
+        --text-color: rgb(221, 235, 251);
+        --window-border-color: rgb(26, 20, 34);
+        --tab-bg-hover: #ffffff0a;
+      }
+    }
+
+    .flex { display: flex; }
+    .ml-auto { margin-left: auto; }
+
+    html, body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+	      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif,"Apple Color Emoji","Segoe UI Emoji","Segoe UI Symbol","Noto Color Emoji";
+    }
+
+    ::placeholder {
+      color: var(--text-color);
     }
 
     #windows {
@@ -24,22 +50,31 @@
     }
 
     .window {
+      padding-bottom: 25px;
+      margin-bottom: 25px;
+      border-bottom: 8px solid var(--window-border-color);
+    }
+
+    .subgroup {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(240px, 2fr));
 
-        border-bottom: 2px solid #deedff8f;
+        border-bottom: 3px solid var(--window-border-color);
         margin-bottom: 10px;
         padding-bottom: 10px;
+        contain: content;
     }
 
-    .window:last-child {
+    .subgroup:last-child {
         border-bottom: none;
     }
 
     .tabIcon {
-        margin-right: 0.2em;
-        height: 100%;
-        max-height: 1em;
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      vertical-align: sub;
+      margin-right: 0.3em;
     }
 
     .tabTitle {
@@ -47,12 +82,17 @@
     }
 
     .tab {
-        cursor: pointer;
-        padding: 5px 10px;
+      cursor: pointer;
+      padding: 5px 10px;
 
-        white-space: nowrap;
-        overflow: hidden;
-        font-size: 1.1em;
+      white-space: nowrap;
+      overflow: hidden;
+      font-size: 0.9em;
+
+      contain: content;
+    }
+    .tab:hover {
+      background-color: var(--tab-bg-hover);
     }
 
     .tabHighlighted {
@@ -67,40 +107,140 @@
         min-height: 20px;
         max-width: 512px;
 
-        background: #030f0b;
+        background: var(--bg-color);
         padding: 8px;
 
-        border: 1px solid #7cffd3;
+        border: 2px solid var(--brand-color);
 
         word-wrap: anywhere;
         overflow: auto;
-        font-size: 1.1em;
+        font-size: 1.05em;
     }
 
     .tabPopoverTitle {
         padding-bottom: 1em;
     }
 
-    .flex {
-      display: flex;
+    .tabPopoverButtons {
+        display: flex;
+        gap: 5px;
+        margin-top: 8px;
     }
 
-    #queryInput {
-        width: calc(100%);
+    .tabPopoverButton {
+        padding: 3px 6px;
+        border-radius: 3px;
+        background: var(--window-border-color);
+        cursor: pointer;
+        font-size: 0.9em;
+    }
+
+    .tabPopoverButton:hover {
+        background: var(--brand-color);
+        color: white;
+    }
+
+    form {
+      display: flex;
+      gap: 10px;
+    }
+    #queryInput, #queryNegativeInput {
+        flex: 1;
         padding: 5px;
-        background: transparent;
-        border: 1px solid #7cffd3;
-        border-radius: 5px;
-        color: #fff;
         font-size: 1.1em;
     }
 
-    .header {
-      margin-bottom: 4px;
+    input, select {
+      background-color: var(--window-border-color);
+      border: 1.5px solid var(--brand-color);
+      border-radius: 5px;
+      color: var(--text-color);
     }
 
-    .header div {
-      padding: 5px;
+    .header {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      border-bottom: 2px solid var(--window-border-color);
+      margin: 10px;
+    }
+
+    .separator {
+      color: var(--brand-color);
+      font-size: 1.1em;
+      font-weight: bolder;
+      font-family: monospace;
+      padding: 0 10px 0 10px;
+    }
+
+    .extra-scroll {
+      height: 50vh
+    }
+
+    .viewSettings {
+      display: flex;
+      gap: 12px;
+      font-family: monospace;
+      margin: 2px 0;
+    }
+    .viewSettings > div {
+      display: flex;
+      align-items: center;
+    }
+
+    .close-tab-on-click .tab:hover { color: #ff4c4c; }
+    .discard-tab-on-click .tab:hover { color: #4f6aff; }
+
+    #filterByContainer {
+      padding: 2px;
+      font-size: 0.8em;
+    }
+
+    a {
+      color: #876cff;
+      text-decoration: none;
+    }
+
+    .small {
+      font-size: 0.75em;
+    }
+
+    .sidebar .subgroup {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar .window {
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+
+    .sidebar .tab {
+        padding: 4px 4px;
+    }
+
+    .sidebar .ml-auto {
+      display: none;
+    }
+    .sidebar .current-window-section {
+      display: none;
+    }
+
+    @media (max-width: 600px) {
+      .header form {
+        flex-direction: column;
+        gap: 5px;
+      }
+      .header {
+        margin: 5px;
+        border-bottom: 1px solid var(--window-border-color);
+      }
+      .viewSettings {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .current-window-section {
+        display: none;
+      }
     }
   </style>
 </head>
@@ -108,7 +248,7 @@
 <body>
   <div class="header">
     <div>
-      <form class="flex">
+      <form>
         <input
           id='queryInput'
           autocomplete="off"
@@ -116,11 +256,33 @@
           placeholder='Search...'
           autofocus
         />
+        <input
+          id='queryNegativeInput'
+          autocomplete="off"
+          type='text' value=''
+          placeholder='Exclude tabs... (regex)'
+          autofocus
+        />
       </form>
     </div>
-    <div class="flex">
-      <input id="queryIsRegex" type="checkbox"/> <div>Regex</div>
-      <input id="sortByUrl" type="checkbox"/> <div>Sort by URL</div>
+    <div class="viewSettings">
+      <div><input id="queryIsRegex" type="checkbox"/>&nbsp;<label for="queryIsRegex">Regex Search</label></div>
+      <div><input id="queryNegativeEnabled" type="checkbox"/>&nbsp;<label for="queryNegativeEnabled">Exclude</label></div>
+      <div><input id="sortByUrl" type="checkbox"/>&nbsp;<label for="sortByUrl">Sort by URL</label></div>
+      <div><input id="splitByTime" type="checkbox"/>&nbsp;<label for="splitByTime">Split by time</label></div>
+      <div><input id="showOnlyInRam" type="checkbox"/>&nbsp;<label for="showOnlyInRam">Only Loaded</label></div>
+      <div id="filterByContainerEl" style="display: none;">
+        <select id="filterByContainer">
+          <option value="">All containers</option>
+        </select>
+      </div>
+      <div class="ml-auto"></div>
+      <div class="current-window-section">
+        <div>Current Window:</div>
+        <!--<div><button id="sort-by-url-browser">Sort Tabs by URL</button></div>-->
+        <div><button id="unload-visible-tabs">Unload Visible Tabs</button></div>
+        <div><button id="save-window">Bookmark Tabs</button></div>
+      </div>
     </div>
   </div>
   <div id="root"></div>

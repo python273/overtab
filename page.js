@@ -1,3 +1,19 @@
+const browser = window.msBrowser || window.browser || window.chrome;
+
+let activeTabIds = {}; // windowId -> tabId
+
+const isSidebar = window.location.search.includes('sidebar=1');
+if (isSidebar) document.body.classList.add('sidebar');
+
+const enableTabPopovers = !isSidebar;
+
+const ezEl = (tag, parent, attributes = {}) => {
+    const el = document.createElement(tag);
+    Object.assign(el, attributes);
+    parent && parent.appendChild(el);
+    return el;
+};
+
 const rootEl = document.querySelector('#root');
 
 document.querySelectorAll('form').forEach(el => {
@@ -6,16 +22,27 @@ document.querySelectorAll('form').forEach(el => {
     });
 });
 
-const tabElId = (tabId) => `tab_${tabId}`;
+const tabElId = (tabId) => `t_${tabId}`;
+
+function getTabIdFromElement(tabEl) {
+    return parseInt(tabEl.id.slice(2), 10);
+}
 
 function getTabIdFromEvent(event) {
-    return parseInt(event.target.closest('.tab').dataset['id'], 10);
+    return getTabIdFromElement(event.target.closest('.tab'));
 }
 
 async function onTabClick(event) {
     event.preventDefault();
     const tabId = getTabIdFromEvent(event);
-    await browser.tabs.update(tabId, {active: true, highlighted: false});
+    if (discardTabOnClick) {
+        document.getSelection().removeAllRanges();
+        await browser.tabs.discard(tabId);
+    } else if (closeTabOnClick) {
+        await browser.tabs.remove(tabId);
+    } else {
+        await browser.tabs.update(tabId, {active: true, highlighted: false});
+    }
 }
 
 async function onTabAuxclick(event) {
@@ -26,18 +53,6 @@ async function onTabAuxclick(event) {
     await browser.tabs.remove(tabId);
 }
 
-/*
-async function highlightTab(event) {
-    const tabId = getTabIdFromEvent(event);
-    await browser.tabs.update(tabId, {active: false, highlighted: true});
-}
-
-async function unhighlightTab(event) {
-    const tabId = getTabIdFromEvent(event);
-    await browser.tabs.update(tabId, {active: false, highlighted: false});
-}
-*/
-
 function closeAllTabPopovers() {
     const els = document.querySelectorAll('.tabPopover');
     for (const el of els) {
@@ -47,34 +62,56 @@ function closeAllTabPopovers() {
 
 
 async function showTabPopover(event) {
+    if (!enableTabPopovers) {
+        return;
+    }
     const tabId = getTabIdFromEvent(event);
-    const tab = await browser.tabs.get(tabId);
+    const tab = await new Promise(resolve => {
+        browser.tabs.get(tabId, resolve);
+    });
+    // get container
+    if (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') {
+        tab.container = await browser.contextualIdentities.get(tab.cookieStoreId);
+    }
 
     const tabEl = document.getElementById(tabElId(tabId));
 
     const pos = tabEl.getBoundingClientRect();
 
-    const el = document.createElement('div');
-    el.id = `tab_popover_${tabId}`;
-    el.classList.add("tabPopover");
-    el.style['position'] = 'absolute';
-    el.style['top'] = `${pos.top + pos.height + window.scrollY}px`;
-    el.style['left'] = `${pos.left + window.scrollX}px`;
-
-    const elTitle = document.createElement('div');
-    elTitle.classList.add("tabPopoverTitle");
-    elTitle.innerText = tab.title;
-    el.appendChild(elTitle);
-
-    const elUrl = document.createElement('div');
-    elUrl.innerText = tab.url;
-    el.appendChild(elUrl);
-
-    el.addEventListener('mouseenter', () => {
-        if (popoverTimeoutId) {
-            clearTimeout(popoverTimeoutId);
+    const el = ezEl('div', null, {
+        id: `tab_popover_${tabId}`,
+        className: 'tabPopover',
+        style: `
+            position: absolute;
+            top: ${pos.top + pos.height + window.scrollY}px;
+            left: ${pos.left + window.scrollX}px;
+            ${tab.container ? `border-color: ${tab.container.colorCode};` : ''}
+        `,
+        onmouseenter: () => {
+            if (popoverTimeoutId) { clearTimeout(popoverTimeoutId); }
         }
-    })
+    });
+
+    ezEl('div', el, {className: 'tabPopoverTitle', innerText: tab.title});
+    ezEl('a', el, {href: tab.url, innerText: tab.url});
+
+    const buttonsEl = ezEl('div', el, {className: 'tabPopoverButtons'});
+    ezEl('div', buttonsEl, {
+        className: 'tabPopoverButton',
+        innerHTML: `Close<br/><div class='small'>(Alt + click on tab)</div>`,
+        onclick: async () => {
+            await browser.tabs.remove(tabId);
+            el.remove();
+        }
+    });
+    ezEl('div', buttonsEl, {
+        className: 'tabPopoverButton',
+        innerHTML: `Unload<br/><div class='small'>(Shift + click on tab)</div>`,
+        onclick: async () => {
+            await browser.tabs.discard(tabId);
+            el.remove();
+        }
+    });
 
     closeAllTabPopovers();
     document.body.appendChild(el);
@@ -94,30 +131,33 @@ async function closeTabPopover(event) {
 }
 
 const createTabEl = (tab) => {
-    const tabEl = document.createElement('div');
-    tabEl.id = tabElId(tab.id);
-    tabEl.dataset['id'] = tab.id;
-    tabEl.classList.add("tab");
-    // if (tab.active) tabEl.classList.add("tabActive");
-    // if (tab.highlighted) tabEl.classList.add("tabHighlighted");
+    const classList = ['tab'];
+    if (tab.active) {
+        classList.push('tabActive');
+        activeTabIds[tab.windowId] = tab.id;
+    }
+    const tabEl = ezEl('div', null, {
+        id: tabElId(tab.id),
+        className: classList.join(' '),
+        style: `${tab.container ? `border-top: 1.5px solid ${tab.container.colorCode};` : ''}`,
+        onclick: onTabClick,
+        onauxclick: onTabAuxclick,
+        ...(enableTabPopovers ? {
+            onmouseenter: showTabPopover,
+            onmouseleave: closeTabPopover
+        } : {})
+    });
 
     if (tab.favIconUrl) {
-        const tabIcon = document.createElement('img');
-        tabIcon.classList.add("tabIcon");
-        tabIcon.src = tab.favIconUrl;
-        tabEl.appendChild(tabIcon);
+        ezEl('img', tabEl, {
+            className: 'tabIcon',
+            src: tab.favIconUrl,
+            loading: 'lazy',
+            decoding: 'async'
+        });
     }
 
-    const tabTitle = document.createElement('span');
-    tabTitle.classList.add("tabTitle");
-    tabTitle.innerText = tab.title;
-    tabEl.appendChild(tabTitle);
-
-    tabEl.addEventListener('click', onTabClick);
-    tabEl.addEventListener('auxclick', onTabAuxclick);
-    tabEl.addEventListener('mouseenter', showTabPopover);
-    tabEl.addEventListener('mouseleave', closeTabPopover);
-
+    tabEl.appendChild(document.createTextNode(tab.title));
     return tabEl;
 }
 
@@ -132,9 +172,16 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 browser.tabs.onRemoved.addListener((tabId) => {
+    // Remove mapping if this tab was active in its window
+    for (const [winId, activeId] of Object.entries(activeTabIds)) {
+        if (activeId === tabId) {
+            delete activeTabIds[winId];
+            break;
+        }
+    }
     const selectorsToRemove = [
-        '#' + tabElId(tabId),
-        '#' + `tab_popover_${tabId}`,
+        `#${tabElId(tabId)}`,
+        `#tab_popover_${tabId}`,
     ];
     for (const s of selectorsToRemove) {
         const els = document.querySelectorAll(s);
@@ -144,38 +191,85 @@ browser.tabs.onRemoved.addListener((tabId) => {
     }
 })
 
+browser.tabs.onActivated.addListener((activeInfo) => {
+    const {tabId, windowId} = activeInfo;
+
+    Array.from(document.querySelectorAll(`#window_${windowId} .tabActive`))
+        .forEach(i => i.classList.remove('tabActive'))
+
+    document.getElementById(tabElId(tabId))?.classList.add('tabActive');
+    activeTabIds[windowId] = tabId;
+});
+
 async function _renderTabs() {
-    let tabs = await browser.tabs.query({});
+    // Reset active tab mapping, will be rebuilt from current tab data
+    activeTabIds = {};
+    const currentWindowId = await new Promise(resolve => {
+        browser.windows.getCurrent({}, window => { resolve(window.id) });
+    });
 
-    if (query) {
+    let containers = [];
+    try {
+        containers = await browser.contextualIdentities.query({});
+    } catch (e) { }
+    const containerByCookieStoreId = {};
+    for (let container of containers) {
+        containerByCookieStoreId[container.cookieStoreId] = container;
+    }
+
+    const tabsFilters = {};
+    if (containerFilterValue) {
+        tabsFilters.cookieStoreId = containerFilterValue;
+    }
+    if (showOnlyInRam) {
+        tabsFilters.discarded = false;
+    }
+    if (isSidebar) {
+        tabsFilters.windowId = currentWindowId;
+    }
+    let tabs = await new Promise(resolve => {
+        browser.tabs.query(tabsFilters, resolve);
+    });
+
+    if (query || queryNegativeRegexp) {
         let newTabs = [];
-
         for (let tab of tabs) {
-            let tabMatching = false;
-
-            if (queryIsRegex) {
-                tabMatching = (
-                    (tab.title && queryRegexp.test(tab.title)) ||
-                    (tab.url && queryRegexp.test(tab.url))
-                );
-            } else {
-                tabMatching = (
-                    (tab.title && tab.title.indexOf(query) >= 0) ||
-                    (tab.url && tab.url.indexOf(query) >= 0)
-                );
+            let tabMatching = !query;
+            if (query) {
+                if (queryIsRegex) {
+                    tabMatching = (
+                        (tab.title && queryRegexp.test(tab.title)) ||
+                        (tab.url && queryRegexp.test(tab.url))
+                    );
+                } else {
+                    tabMatching = (
+                        (tab.title && tab.title.indexOf(query) >= 0) ||
+                        (tab.url && tab.url.indexOf(query) >= 0)
+                    );
+                }
+            }
+            if (tabMatching && queryNegativeRegexp) {
+                if (
+                    (tab.title && queryNegativeRegexp.test(tab.title)) ||
+                    (tab.url && queryNegativeRegexp.test(tab.url))
+                ) {
+                    tabMatching = false;
+                }
             }
             if (!tabMatching) continue;
-            
             newTabs.push(tab);
         }
-
         tabs = newTabs;
+    }
+
+    for (let tab of tabs) {
+        tab.container = containerByCookieStoreId[tab.cookieStoreId];
     }
 
     if (sortByUrl) {
         tabs.sort((a, b) => a.url.localeCompare(b.url));
     } else {
-        tabs.sort((a, b) => a.index - b.index);
+        tabs.sort((a, b) => b.index - a.index);  // reverse
     }
 
     const tabsByWindows = {};
@@ -193,22 +287,45 @@ async function _renderTabs() {
         windowTabs.push(tab);
     }
 
-    const windowsEl = document.createElement('div');
-    windowsEl.id = "windows";
+    const windowsEl = ezEl('div', null, {id: 'windows'});
 
-    for(let windowId in tabsByWindows) {
+    // sort windows, first current window, then others
+    const windowIds = Object.keys(tabsByWindows).sort((a, b) => {
+        if (a == currentWindowId) return -1;
+        if (b == currentWindowId) return 1;
+        return 0;
+    });
+
+    for (let windowId of windowIds) {
         const windowTabs = tabsByWindows[windowId];
+        if (!windowTabs.length) {
+            continue;
+        }
 
-        const windowEl = document.createElement('div');
-        windowEl.classList.add("window");
-        windowsEl.appendChild(windowEl);
+        const windowEl = ezEl('div', windowsEl, {
+            id: `window_${windowId}`,
+            className: 'window',
+        });
+        let subgroupEl = ezEl('div', windowEl, {className: 'subgroup'});
+
+        let privTime = windowTabs[0].lastAccessed;
 
         for (let tab of windowTabs) {
+            if (splitByTime && (Math.abs(tab.lastAccessed - privTime) > 4 * 60 * 60 * 1000)) {
+                ezEl('div', windowEl, {
+                    className: 'separator',
+                    innerText: new Date(tab.lastAccessed).toLocaleString()
+                });
+                subgroupEl = ezEl('div', windowEl, {className: 'subgroup'});
+            }
+
+            privTime = tab.lastAccessed;
             const tabEl = createTabEl(tab);
-            windowEl.appendChild(tabEl);
+            subgroupEl.appendChild(tabEl);
         }
     }
 
+    ezEl('div', windowsEl, {className: 'extra-scroll'});
     rootEl.replaceChildren(windowsEl);
 }
 
@@ -232,50 +349,212 @@ async function renderTabs() {
     rendering = false;
 }
 
-browser.tabs.onCreated.addListener((tabId) => {
-    renderTabs().then(() => {});
-})
+browser.tabs.onCreated.addListener((tabId) => { renderTabs().then(() => {}) });
 
+let closeTabOnClick = false;
+document.addEventListener('keydown', (e) => {
+    if (e.key !== "Alt") return;
+    closeTabOnClick = true;
+    rootEl.classList.add('close-tab-on-click');
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key !== "Alt") return;
+    closeTabOnClick = false;
+    rootEl.classList.remove('close-tab-on-click');
+});
 
+let discardTabOnClick = false;
+document.addEventListener('keydown', (e) => {
+    if (e.key !== "Shift") return;
+    discardTabOnClick = true;
+    rootEl.classList.add('discard-tab-on-click');
+});
+document.addEventListener('keyup', (e) => {
+    if (e.key !== "Shift") return;
+    discardTabOnClick = false;
+    rootEl.classList.remove('discard-tab-on-click');
+});
+
+// QUERY
 let query = '';
-let queryRegexp = '';
+let queryRegexp = new RegExp('', 'ig');
 
 function onQueryInputChange(event) {
     closeAllTabPopovers();
-
     query = event.target.value.trimStart();
     queryRegexp = new RegExp(query, 'ig');
-
     renderTabs().then(() => {});
 }
 
-document.getElementById('queryInput').addEventListener('input', onQueryInputChange);
+const queryInputEl = document.getElementById('queryInput');
+queryInputEl.addEventListener('input', onQueryInputChange);
 
-let sortByUrl = false;
+// QUERY NEGATIVE
+let queryNegativeRegexp = null;
+let queryNegativeEnabled = localStorage['cfg-query-negative-enabled'] === '1';
+
+function setQueryNegativeRegexp(s) {
+    queryNegativeRegexp = queryNegativeEnabled && s ? new RegExp(s, 'ig') : null;
+    localStorage['cfg-query-negative'] = s || '';
+}
+setQueryNegativeRegexp(localStorage['cfg-query-negative']);
+
+function onQueryNegativeEnabledChange(event) {
+    closeAllTabPopovers();
+    queryNegativeEnabled = event.target.checked;
+    localStorage['cfg-query-negative-enabled'] = queryNegativeEnabled ? '1' : '0';
+    setQueryNegativeRegexp(queryNegativeInputEl.value);
+    renderTabs().then(() => {});
+}
+
+const queryNegativeEnabledEl = document.getElementById('queryNegativeEnabled');
+queryNegativeEnabledEl.addEventListener('change', onQueryNegativeEnabledChange);
+queryNegativeEnabledEl.checked = queryNegativeEnabled;
+
+function onQueryNegativeInputChange(event) {
+    closeAllTabPopovers();
+    setQueryNegativeRegexp(event.target.value);
+    renderTabs().then(() => {});
+}
+const queryNegativeInputEl = document.getElementById('queryNegativeInput');
+queryNegativeInputEl.addEventListener('input', onQueryNegativeInputChange);
+queryNegativeInputEl.value = localStorage['cfg-query-negative'];
+
+let sortByUrl = localStorage['cfg-sort-by-url'] === '1';
 
 function onSortChange(event) {
     closeAllTabPopovers();
     sortByUrl = event.target.checked;
+    localStorage['cfg-sort-by-url'] = sortByUrl ? '1' : '0';
     renderTabs().then(() => {});
 }
 
-document.getElementById('sortByUrl').addEventListener('change', onSortChange);
-document.getElementById('sortByUrl').checked = false;
+const sortByUrlEl = document.getElementById('sortByUrl');
+sortByUrlEl.addEventListener('change', onSortChange);
+sortByUrlEl.checked = sortByUrl;
 
-let queryIsRegex = false;
+let queryIsRegex = localStorage['cfg-regex'] === '1';
 
 function onQueryIsRegexChange(event) {
     closeAllTabPopovers();
     queryIsRegex = event.target.checked;
+    localStorage['cfg-regex'] = queryIsRegex ? '1' : '0';
     renderTabs().then(() => {});
 }
 
-document.getElementById('queryIsRegex').addEventListener('change', onQueryIsRegexChange);
-document.getElementById('queryIsRegex').checked = false;
+const queryIsRegexEl = document.getElementById('queryIsRegex');
+queryIsRegexEl.addEventListener('change', onQueryIsRegexChange);
+queryIsRegexEl.checked = queryIsRegex;
 
-// function onKeyupHotkey(event) {
-//     console.log(event);
-// }
-// window.addEventListener('keyup', onKeyupHotkey);
+let splitByTime = localStorage['cfg-split-by-time'] === '1';
+
+function onSplitByTimeChange(event) {
+    closeAllTabPopovers();
+    splitByTime = event.target.checked;
+    localStorage['cfg-split-by-time'] = splitByTime ? '1' : '0';
+    renderTabs().then(() => {});
+}
+
+const splitByTimeEl = document.getElementById('splitByTime');
+splitByTimeEl.addEventListener('change', onSplitByTimeChange);
+splitByTimeEl.checked = splitByTime;
+
+let showOnlyInRam = localStorage['cfg-show-only-in-ram'] === '1';
+
+function onShowOnlyInRamChange(event) {
+    closeAllTabPopovers();
+    showOnlyInRam = event.target.checked;
+    localStorage['cfg-show-only-in-ram'] = showOnlyInRam ? '1' : '0';
+    renderTabs().then(() => {});
+}
+
+const showOnlyInRamEl = document.getElementById('showOnlyInRam');
+showOnlyInRamEl.addEventListener('change', onShowOnlyInRamChange);
+showOnlyInRamEl.checked = showOnlyInRam;
+
+let containerFilterValue = '';
+
+function onFilterByContainerChange(event) {
+    closeAllTabPopovers();
+    containerFilterValue = event.target.value;
+    renderTabs().then(() => {});
+}
+
+const filterByContainerEl = document.getElementById('filterByContainer');
+filterByContainerEl.addEventListener('input', onFilterByContainerChange);
+
+(async () => {
+    let containers = [];
+    try {
+        containers = await browser.contextualIdentities.query({});
+    } catch (e) { }
+    if (!containers.length) return;
+    for (let container of containers) {
+        ezEl('option', filterByContainerEl, {
+            value: container.cookieStoreId,
+            innerText: container.name
+        });
+    }
+    filterByContainerEl.parentElement.style.display = 'block';
+})().then(() => {});
+
+document.getElementById('save-window').addEventListener('click', async () => {
+    if (!confirm('Save window?')) return;
+
+    const now = new Date();
+    const folderName = `tabs_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+    const containerCache = {};
+    try {
+        (await browser.contextualIdentities.query({})).forEach(container => {
+            containerCache[container.cookieStoreId] = container.name;
+        });
+    } catch (e) { }
+
+    const folder = await new Promise(resolve => {
+        browser.bookmarks.create({ title: folderName }, resolve);
+    });
+    const tabs = await new Promise(resolve => {
+        browser.tabs.query({ currentWindow: true }, resolve);
+    });
+
+    for (const tab of tabs) {
+        const containerName = containerCache[tab.cookieStoreId] || '';
+        let title = tab.title;
+        if (tab.cookieStoreId && tab.cookieStoreId !== 'firefox-default') {
+            title = `%${containerName}% ${tab.title}`;
+        }
+        await new Promise(resolve => {
+            browser.bookmarks.create({
+                parentId: folder.id,
+                title: title,
+                url: tab.url
+            }, resolve);
+        });
+    }
+
+    alert(`Saved as ${folderName}`);
+});
+
+// document.getElementById('sort-by-url-browser').addEventListener('click', async () => {
+//     if (!confirm('Sort browser tabs by URL?')) return;
+//     const currentWindowTabs = await browser.tabs.query({ currentWindow: true });
+//     currentWindowTabs.sort((a, b) => a.url.localeCompare(b.url));
+//     for (let i = 0; i < currentWindowTabs.length; i++) {
+//         await browser.tabs.move(currentWindowTabs[i].id, { index: i });
+//     }
+// });
+
+document.getElementById('unload-visible-tabs').addEventListener('click', async function () {
+    if (!confirm('Unload visible tabs?')) return;
+    const currentWindowId = await new Promise(resolve => {
+        browser.windows.getCurrent({}, window => { resolve(window.id) });
+    });
+    const tabElements = document.querySelectorAll(`#window_${currentWindowId} .tab`);
+    for (const tabEl of tabElements) {
+        const tabId = getTabIdFromElement(tabEl);
+        await browser.tabs.discard(tabId);
+    }
+});
 
 renderTabs().then(()=>{});
